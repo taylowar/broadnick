@@ -15,3 +15,5 @@ $ ./broadnick
 
 ## References
 
+nothings/stb: `https://github.com/nothings/stb`
+ded: `https://github.com/tsoding/ded`
