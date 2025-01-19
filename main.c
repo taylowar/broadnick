@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <string.h>
 
 #define VEC_IMPLEMENTATION
 #include "vec.h"
@@ -142,7 +143,7 @@ char text_buffer[BUFFER_CAPACITY];
 size_t buffer_cursor = 0;
 size_t buffer_size = 0;
 
-void insert_text_before_cursor(const char *text) 
+void buffer_insert_text_before_cursor(const char *text) 
 {
     size_t text_size = strlen(text);
     const size_t free_space = BUFFER_CAPACITY - buffer_size;
@@ -157,6 +158,15 @@ void insert_text_before_cursor(const char *text)
     memcpy(text_buffer+buffer_cursor, text, text_size);
     buffer_size += text_size;
     buffer_cursor += text_size;
+}
+
+void buffer_backspace() 
+{
+    if (buffer_size > 0 && buffer_cursor > 0) {
+        memcpy(text_buffer+buffer_cursor-1, text_buffer+buffer_cursor, buffer_size-buffer_cursor);
+        buffer_size-=1;
+        buffer_cursor-=1;
+    }
 }
 
 #define UNHEX(color) \
@@ -209,16 +219,7 @@ int main(void)
                 case SDL_KEYDOWN: {
                     switch (evt.key.keysym.sym) {
                         case SDLK_BACKSPACE: {
-                            if (buffer_size > 0) {
-                                //text_buffer[buffer_cursor] = 32;
-                                for (size_t i=buffer_cursor+1;i<buffer_size;++i) {
-                                    text_buffer[i-1] = text_buffer[i];
-                                }
-                                buffer_size-=1;
-                                if (buffer_cursor >= buffer_size) {
-                                    buffer_cursor = buffer_size;
-                                }
-                            }
+                            buffer_backspace();
                         } break;
                         case SDLK_LEFT: {
                             if (buffer_cursor > 0) {
@@ -236,7 +237,7 @@ int main(void)
                     }
                 } break;
                 case SDL_TEXTINPUT: {
-                    insert_text_before_cursor(evt.text.text);
+                    buffer_insert_text_before_cursor(evt.text.text);
                 } break;
             }
         }
