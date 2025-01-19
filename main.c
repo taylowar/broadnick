@@ -169,6 +169,14 @@ void buffer_backspace()
     }
 }
 
+void buffer_delete()
+{
+    if (buffer_cursor < buffer_size && buffer_size > 0) {
+        memcpy(text_buffer+buffer_cursor, text_buffer+buffer_cursor+1, buffer_size-buffer_cursor);
+        buffer_size-=1;
+    }
+}
+
 #define UNHEX(color) \
         ((color)>>(8*0))&0xFF, \
         ((color)>>(8*1))&0xFF, \
@@ -220,6 +228,9 @@ int main(void)
                     switch (evt.key.keysym.sym) {
                         case SDLK_BACKSPACE: {
                             buffer_backspace();
+                        } break;
+                        case SDLK_DELETE: {
+                            buffer_delete();
                         } break;
                         case SDLK_LEFT: {
                             if (buffer_cursor > 0) {
