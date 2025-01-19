@@ -113,7 +113,8 @@ void render_char(SDL_Renderer *renderer, const Font *font, char chr, Vec2f pos, 
         .w = (int) floorf(FONT_CHAR_WIDTH * scale),
         .h = (int) floorf(FONT_CHAR_HEIGHT * scale),
     };
-    assert(chr >= ASCII_DISPLAY_LOW && chr <= ASCII_DISPLAY_HIGH);
+    assert(chr >= ASCII_DISPLAY_LOW);
+    assert(chr <= ASCII_DISPLAY_HIGH);
     const size_t idx = chr-ASCII_DISPLAY_LOW;
     scc(SDL_RenderCopy(renderer, font->spritesheet, &font->glyph_table[idx], &dst));
 }
@@ -140,6 +141,23 @@ void render_text(SDL_Renderer *renderer, const Font *font, const char *text, Vec
 char text_buffer[BUFFER_CAPACITY];
 size_t buffer_cursor = 0;
 size_t buffer_size = 0;
+
+void insert_text_before_cursor(const char *text) 
+{
+    size_t text_size = strlen(text);
+    const size_t free_space = BUFFER_CAPACITY - buffer_size;
+    if (text_size > free_space) {
+        text_size = free_space;
+    }
+    memmove(
+        text_buffer+buffer_cursor+text_size,
+        text_buffer+buffer_cursor,
+        buffer_size-buffer_cursor
+    );
+    memcpy(text_buffer+buffer_cursor, text, text_size);
+    buffer_size += text_size;
+    buffer_cursor += text_size;
+}
 
 #define UNHEX(color) \
         ((color)>>(8*0))&0xFF, \
@@ -218,14 +236,7 @@ int main(void)
                     }
                 } break;
                 case SDL_TEXTINPUT: {
-                    size_t text_size = strlen(evt.text.text);
-                    const size_t free_space = BUFFER_CAPACITY - buffer_size;
-                    if (text_size > free_space) {
-                        text_size = free_space;
-                    }
-                    memcpy(text_buffer+buffer_size, evt.text.text, text_size);
-                    buffer_size += text_size;
-                    buffer_cursor = buffer_size;
+                    insert_text_before_cursor(evt.text.text);
                 } break;
             }
         }
