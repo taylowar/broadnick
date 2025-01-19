@@ -65,6 +65,17 @@ SDL_Surface* surface_from_file(const char *filepath)
     );
 }
 
+void set_texture_color(SDL_Texture *texture, Uint32 color)
+{
+    scc(SDL_SetTextureColorMod(
+        texture, 
+        (color>>(8*0))&0xff,
+        (color>>(8*1))&0xff,
+        (color>>(8*2))&0xff
+    ));
+    scc(SDL_SetTextureAlphaMod(texture, (color>>(8*3))&0xff));
+}
+
 #define ASCII_DISPLAY_LOW 32
 #define ASCII_DISPLAY_HIGH 126
 
@@ -76,9 +87,10 @@ typedef struct {
 Font font_load_from_file(SDL_Renderer *renderer, const char *filepath)
 {
     Font font = {0};
-    SDL_Surface *surface = surface_from_file(filepath);
-    font.spritesheet = scp(SDL_CreateTextureFromSurface(renderer, surface));
-    SDL_FreeSurface(surface);
+    SDL_Surface *font_surface = surface_from_file(filepath);
+    scc(SDL_SetColorKey(font_surface, SDL_TRUE, 0xFF000000));
+    font.spritesheet = scp(SDL_CreateTextureFromSurface(renderer, font_surface));
+    SDL_FreeSurface(font_surface);
     for (size_t ascii=ASCII_DISPLAY_LOW;ascii<=ASCII_DISPLAY_HIGH;++ascii) {
         const size_t idx = ascii-ASCII_DISPLAY_LOW;
         const size_t col = idx % FONT_COLS;
@@ -93,7 +105,7 @@ Font font_load_from_file(SDL_Renderer *renderer, const char *filepath)
     return font;
 }
 
-void render_char(SDL_Renderer *renderer, Font font, char chr, Vec2f pos, float scale)
+void render_char(SDL_Renderer *renderer, const Font *font, char chr, Vec2f pos, float scale)
 {
     const SDL_Rect dst = {
         .x = (int) floorf(pos.x),
@@ -103,27 +115,21 @@ void render_char(SDL_Renderer *renderer, Font font, char chr, Vec2f pos, float s
     };
     assert(chr >= ASCII_DISPLAY_LOW && chr <= ASCII_DISPLAY_HIGH);
     const size_t idx = chr-ASCII_DISPLAY_LOW;
-    scc(SDL_RenderCopy(renderer, font.spritesheet, &font.glyph_table[idx], &dst));
+    scc(SDL_RenderCopy(renderer, font->spritesheet, &font->glyph_table[idx], &dst));
 }
 
-void render_text_sized(SDL_Renderer *renderer, Font font, const char *text, size_t text_size, Vec2f pos, Uint32 color, float scale)
+void render_text_sized(SDL_Renderer *renderer, const Font *font, const char *text, size_t text_size, Vec2f pos, Uint32 color, float scale)
 {
     Vec2f pen = {0};
     vec2f_make(&pos, pos.x, pos.y);
-    scc(SDL_SetTextureColorMod(
-        font.spritesheet, 
-        (color>>(8*3))&0xff,
-        (color>>(8*2))&0xff,
-        (color>>(8*1))&0xff
-    ));
-    scc(SDL_SetTextureAlphaMod(font.spritesheet, (color>>(8*0))&0xff));
+    set_texture_color(font->spritesheet, color);
     for (size_t i=0;i<text_size;++i) {
         render_char(renderer, font, text[i], pen, scale);
         pen.x += FONT_CHAR_WIDTH*scale;
     }
 }
 
-void render_text(SDL_Renderer *renderer, Font font, const char *text, Vec2f pos, Uint32 color, float scale)
+void render_text(SDL_Renderer *renderer, const Font *font, const char *text, Vec2f pos, Uint32 color, float scale)
 {
     render_text_sized(renderer, font, text, strlen(text), pos, color, scale);
 }
@@ -141,17 +147,26 @@ size_t buffer_size = 0;
         ((color)>>(8*2))&0xFF, \
         ((color)>>(8*3))&0xFF
 
-void render_cursor(SDL_Renderer *renderer, Uint32 color)
+void render_cursor(SDL_Renderer *renderer, const Font *font)
 {
-    const SDL_Rect rect = {
+    const Vec2f pos = {
         .x = (int) floorf(buffer_cursor * FONT_CHAR_WIDTH*FONT_SCALE),
-        .y = 0,
+        .y = 0
+    };
+    const SDL_Rect rect = {
+        .x = (int)floorf(pos.x),
+        .y = (int)floorf(pos.y),
         .w = FONT_CHAR_WIDTH*FONT_SCALE,
         .h = FONT_CHAR_HEIGHT*FONT_SCALE,
     };
 
-    scc(SDL_SetRenderDrawColor(renderer, UNHEX(color)));
+    scc(SDL_SetRenderDrawColor(renderer, UNHEX(0xFFFFFFFF)));
     scc(SDL_RenderFillRect(renderer, &rect));
+
+    set_texture_color(font->spritesheet, 0xFF000000);
+    if (buffer_cursor < buffer_size) {
+        render_char(renderer, font, text_buffer[buffer_cursor], pos, FONT_SCALE);
+    }
 }
 
 int main(void)
@@ -177,9 +192,28 @@ int main(void)
                     switch (evt.key.keysym.sym) {
                         case SDLK_BACKSPACE: {
                             if (buffer_size > 0) {
+                                //text_buffer[buffer_cursor] = 32;
+                                for (size_t i=buffer_cursor+1;i<buffer_size;++i) {
+                                    text_buffer[i-1] = text_buffer[i];
+                                }
                                 buffer_size-=1;
-                                buffer_cursor = buffer_size;
+                                if (buffer_cursor >= buffer_size) {
+                                    buffer_cursor = buffer_size;
+                                }
                             }
+                        } break;
+                        case SDLK_LEFT: {
+                            if (buffer_cursor > 0) {
+                                buffer_cursor -= 1;
+                            }
+                        } break;
+                        case SDLK_RIGHT: {
+                            if (buffer_cursor < buffer_size) {
+                                buffer_cursor += 1;
+                            }
+                        } break;
+                        case SDLK_ESCAPE: {
+                            quit=true;
                         } break;
                     }
                 } break;
@@ -201,15 +235,13 @@ int main(void)
 
         Vec2f pos = {0};
         vec2f_make(&pos, 100.0, 100.0);
-        render_text_sized(renderer, font, text_buffer, buffer_size, pos, 0xFFFFFFFF, FONT_SCALE);
+        render_text_sized(renderer, &font, text_buffer, buffer_size, pos, 0xFFFFFFFF, FONT_SCALE);
 
-        render_cursor(renderer,0xFFFFFF);
+        render_cursor(renderer, &font);
 
         SDL_RenderPresent(renderer);
     }
-
     SDL_DestroyWindow(window);
-
     SDL_Quit();
     return 0;
 }
