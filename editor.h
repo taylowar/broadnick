@@ -3,9 +3,11 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <errno.h>
 #include <string.h>
 
-#define LINE_INIT_CAPACITY 245
+#define LINE_INIT_CAPACITY 1024
 
 typedef struct {
     size_t capacity;
@@ -49,6 +51,7 @@ void editor_insert_new_line(Editor *editor);
 void editor_insert_text_before_cursor(Editor *editor, const char *text);
 void editor_backspace(Editor *editor);
 void editor_delete(Editor *editor);
+void editor_save_to_file(const Editor *editor, const char *filepath);
 
 const char *editor_char_under_cursor(Editor *editor);
 
@@ -182,6 +185,20 @@ const char *editor_char_under_cursor(Editor *editor)
         }
     }
     return NULL;
+}
+
+void editor_save_to_file(const Editor *editor, const char *filepath)
+{
+    FILE *fd = fopen(filepath, "w");
+    if (fd == NULL) {
+        fprintf(stderr, "ERROR: unable to open %s: %s\n", filepath, strerror(errno));
+        exit(1);
+    }
+    for (size_t row=0;row<editor->size;++row) {
+        fwrite(editor->lines[row].es, 1, editor->lines[row].size, fd);
+        fputc('\n', fd);
+    }
+    fclose(fd);
 }
 
 #endif // EDITOR_IMPLEMENTATIO

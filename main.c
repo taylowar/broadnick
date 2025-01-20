@@ -198,6 +198,9 @@ int main(void)
                         case SDLK_BACKSPACE: {
                             editor_backspace(&editor);
                         } break;
+                        case SDLK_F2: {
+                            editor_save_to_file(&editor, "test.c");
+                        } break;
                         case SDLK_DELETE: {
                             editor_delete(&editor);
                         } break;
