@@ -1,5 +1,6 @@
 
 #include <SDL2/SDL_events.h>
+#include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_surface.h>
 #include <stdio.h>
@@ -10,8 +11,8 @@
 #define VEC_IMPLEMENTATION
 #include "vec.h"
 
-#define LINE_IMPLEMENTATION
-#include "line.h"
+#define EDITOR_IMPLEMENTATION
+#include "editor.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -126,7 +127,7 @@ void render_char(SDL_Renderer *renderer, const Font *font, char chr, Vec2f pos, 
 void render_text_sized(SDL_Renderer *renderer, const Font *font, const char *text, size_t text_size, Vec2f pos, Uint32 color, float scale)
 {
     Vec2f pen = {0};
-    vec2f_make(&pos, pos.x, pos.y);
+    vec2f_make(&pen, pos.x, pos.y);
     set_texture_color(font->spritesheet, color);
     for (size_t i=0;i<text_size;++i) {
         render_char(renderer, font, text[i], pen, scale);
@@ -142,8 +143,7 @@ void render_text(SDL_Renderer *renderer, const Font *font, const char *text, Vec
 #define FONT_SCALE 5.f
 
 
-Line line = {0};
-size_t cursor = 0;
+Editor editor = {0};
 
 #define UNHEX(color) \
         ((color)>>(8*0))&0xFF, \
@@ -153,7 +153,10 @@ size_t cursor = 0;
 
 void render_cursor(SDL_Renderer *renderer, const Font *font)
 {
-    const Vec2f pos = { .x = (int) floorf(cursor * FONT_CHAR_WIDTH*FONT_SCALE), .y = 0 };
+    const Vec2f pos = {
+        .x = (int) floorf(editor.cursor_col * FONT_CHAR_WIDTH*FONT_SCALE),
+        .y = (int) floorf(editor.cursor_row * FONT_CHAR_HEIGHT*FONT_SCALE),
+    };
     const SDL_Rect rect = {
         .x = (int)floorf(pos.x),
         .y = (int)floorf(pos.y),
@@ -164,9 +167,10 @@ void render_cursor(SDL_Renderer *renderer, const Font *font)
     scc(SDL_SetRenderDrawColor(renderer, UNHEX(0xFFFFFFFF)));
     scc(SDL_RenderFillRect(renderer, &rect));
 
-    set_texture_color(font->spritesheet, 0xFF000000);
-    if (cursor < line.size) {
-        render_char(renderer, font, line.es[cursor], pos, FONT_SCALE);
+    const char *c = editor_char_under_cursor(&editor);
+    if (c) {
+        set_texture_color(font->spritesheet, 0xFF000000);
+        render_char(renderer, font, *c, pos, FONT_SCALE);
     }
 }
 
@@ -192,23 +196,29 @@ int main(void)
                 case SDL_KEYDOWN: {
                     switch (evt.key.keysym.sym) {
                         case SDLK_BACKSPACE: {
-                            line_backspace(&line, cursor);
-                            if (cursor > 0) {
-                                cursor -= 1;
-                            }
+                            editor_backspace(&editor);
                         } break;
                         case SDLK_DELETE: {
-                            line_delete(&line, cursor);
+                            editor_delete(&editor);
+                        } break;
+                        case SDLK_UP: {
+                            if (editor.cursor_row > 0) {
+                                editor.cursor_row -= 1;
+                            }
+                        } break;
+                        case SDLK_DOWN: {
+                            editor.cursor_row += 1;
                         } break;
                         case SDLK_LEFT: {
-                            if (cursor > 0) {
-                                cursor -= 1;
+                            if (editor.cursor_col > 0) { 
+                                editor.cursor_col -= 1;
                             }
                         } break;
                         case SDLK_RIGHT: {
-                            if (cursor < line.size) {
-                                cursor += 1;
-                            }
+                            editor.cursor_col += 1;
+                        } break;
+                        case SDLK_RETURN: {
+                            editor_insert_new_line(&editor);
                         } break;
                         case SDLK_ESCAPE: {
                             quit=true;
@@ -216,8 +226,7 @@ int main(void)
                     }
                 } break;
                 case SDL_TEXTINPUT: {
-                    line_insert_text_before(&line, evt.text.text, cursor);
-                    cursor += strlen(evt.text.text);
+                    editor_insert_text_before_cursor(&editor, evt.text.text);
                 } break;
             }
         }
@@ -225,9 +234,12 @@ int main(void)
         scc(SDL_SetRenderDrawColor(renderer, 8, 8, 8, 255));
         scc(SDL_RenderClear(renderer));
 
-        Vec2f pos = {0};
-        vec2f_make(&pos, 100.0, 100.0);
-        render_text_sized(renderer, &font, line.es, line.size, pos, 0xFFFFFFFF, FONT_SCALE);
+        for (size_t row=0;row<editor.size;++row) {
+            const Line *line = editor.lines + row;
+            Vec2f pos = {0};
+            vec2f_make(&pos, 0, row*FONT_CHAR_HEIGHT*FONT_SCALE);
+            render_text_sized(renderer, &font, line->es, line->size, pos, 0xFFFFFFFF, FONT_SCALE);
+        }
 
         render_cursor(renderer, &font);
 
