@@ -1,8 +1,4 @@
 
-#include <SDL2/SDL_events.h>
-#include <SDL2/SDL_keycode.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_surface.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -174,8 +170,32 @@ void render_cursor(SDL_Renderer *renderer, const Font *font)
     }
 }
 
-int main(void)
+char *argv_shift(int *argc, char ***argv)
 {
+    char *out = **argv;
+    (*argc) -= 1;
+    (*argv) += 1;
+    return out;
+}
+
+int main(int argc, char **argv)
+{
+    argv_shift(&argc, &argv);
+    char *loaded_file_path = NULL; 
+
+    if (argc>0) {
+        loaded_file_path = argv_shift(&argc, &argv);
+        printf("`%s` loaded\n", loaded_file_path);
+    }
+
+    if (loaded_file_path) {
+        FILE *file = fopen(loaded_file_path, "r");
+        if (file != NULL) {
+            editor_load_from_file(&editor, file);
+            fclose(file);
+        }
+    }
+
     scc(SDL_Init(SDL_INIT_VIDEO));
 
     SDL_Window *window = 
@@ -199,7 +219,9 @@ int main(void)
                             editor_backspace(&editor);
                         } break;
                         case SDLK_F2: {
-                            editor_save_to_file(&editor, "test.c");
+                            if (loaded_file_path) {
+                                editor_save_to_file(&editor, loaded_file_path);
+                            }
                         } break;
                         case SDLK_DELETE: {
                             editor_delete(&editor);
@@ -252,3 +274,7 @@ int main(void)
     SDL_Quit();
     return 0;
 }
+
+#define SV_IMPLEMENTATION
+#include "sv.h"
+

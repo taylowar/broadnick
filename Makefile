@@ -3,4 +3,3 @@ LIBS=`pkg-config --libs sdl2` -lm
 
 brodnick: main.c
 	$(CC) $(CFLAGS) -o broadnick main.c $(LIBS)
-

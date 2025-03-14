@@ -17,3 +17,4 @@ $ ./broadnick
 
 nothings/stb: `https://github.com/nothings/stb`
 ded: `https://github.com/tsoding/ded`
+sv.h: `https://github.com/tsoding/sv/blob/master/sv.h`
