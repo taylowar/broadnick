@@ -1,4 +1,5 @@
 
+#include <SDL2/SDL_stdinc.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -14,6 +15,11 @@
 #include "stb_image.h"
 
 #include <SDL2/SDL.h>
+
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 600
+#define FPS 600
+#define DELTA_TIME (1.0f / FPS)
 
 #define FONT_WIDTH 128.f
 #define FONT_HEIGHT 64.f
@@ -138,8 +144,9 @@ void render_text(SDL_Renderer *renderer, const Font *font, const char *text, Vec
 
 #define FONT_SCALE 5.f
 
-
 Editor editor = {0};
+Vec2f camera_pos = {0};
+Vec2f camera_vel = {0};
 
 #define UNHEX(color) \
         ((color)>>(8*0))&0xFF, \
@@ -149,10 +156,11 @@ Editor editor = {0};
 
 void render_cursor(SDL_Renderer *renderer, const Font *font)
 {
-    const Vec2f pos = {
+    Vec2f pos = {
         .x = (int) floorf(editor.cursor_col * FONT_CHAR_WIDTH*FONT_SCALE),
         .y = (int) floorf(editor.cursor_row * FONT_CHAR_HEIGHT*FONT_SCALE),
     };
+    vec2f_sub(&pos, camera_pos);
     const SDL_Rect rect = {
         .x = (int)floorf(pos.x),
         .y = (int)floorf(pos.y),
@@ -178,6 +186,27 @@ char *argv_shift(int *argc, char ***argv)
     return out;
 }
 
+Vec2f window_size(SDL_Window *window)
+{
+    int window_width, window_height;
+    SDL_GetWindowSize(window, &window_width, &window_height);
+    return (Vec2f){.x=(float)window_width, .y=(float)window_height};
+}
+
+void camera_project_point(SDL_Window *window, Vec2f point)
+{
+    Vec2f cp = {0};
+    Vec2f ws = window_size(window);
+    vec2f_add(&cp, camera_pos);
+    vec2f_div(&ws, (Vec2f){.x=2,.y=2});
+    vec2f_add(&cp, ws);
+    vec2f_sub(&cp, point);
+    vec2f_sub(&camera_vel, cp);
+    vec2f_mul(&camera_vel, (Vec2f){.x=DELTA_TIME,.y=DELTA_TIME});
+    vec2f_mul(&camera_vel, (Vec2f){.x=2,.y=2});
+    vec2f_add(&camera_pos, camera_vel);
+}
+
 int main(int argc, char **argv)
 {
     argv_shift(&argc, &argv);
@@ -198,15 +227,14 @@ int main(int argc, char **argv)
 
     scc(SDL_Init(SDL_INIT_VIDEO));
 
-    SDL_Window *window = 
-        scp(SDL_CreateWindow("broadnic", 0, 0, 800, 600, SDL_WINDOW_RESIZABLE));
-    SDL_Renderer *renderer = 
-        SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    SDL_Window *window = scp(SDL_CreateWindow("broadnic", 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_RESIZABLE));
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
     Font font = font_load_from_file(renderer, "./charmap-oldschool_white.png");
 
     bool quit = false;
     while (!quit) {
+        const Uint32 start = SDL_GetTicks();
         SDL_Event evt = {0};
         while (SDL_PollEvent(&evt)) {
             switch (evt.type) {
@@ -215,6 +243,9 @@ int main(int argc, char **argv)
                 } break;
                 case SDL_KEYDOWN: {
                     switch (evt.key.keysym.sym) {
+                        case SDLK_TAB: {
+                            editor_insert_text_before_cursor(&editor, "  "); 
+                        } break;
                         case SDLK_BACKSPACE: {
                             editor_backspace(&editor);
                         } break;
@@ -232,7 +263,9 @@ int main(int argc, char **argv)
                             }
                         } break;
                         case SDLK_DOWN: {
-                            editor.cursor_row += 1;
+                            if (editor.cursor_row < editor.size) {
+                                editor.cursor_row += 1;
+                            }
                         } break;
                         case SDLK_LEFT: {
                             if (editor.cursor_col > 0) { 
@@ -240,7 +273,9 @@ int main(int argc, char **argv)
                             }
                         } break;
                         case SDLK_RIGHT: {
-                            editor.cursor_col += 1;
+                            if (editor.cursor_col < 80) {
+                                editor.cursor_col += 1;
+                            }
                         } break;
                         case SDLK_RETURN: {
                             editor_insert_new_line(&editor);
@@ -261,14 +296,26 @@ int main(int argc, char **argv)
 
         for (size_t row=0;row<editor.size;++row) {
             const Line *line = editor.lines + row;
-            Vec2f pos = {0};
-            vec2f_make(&pos, 0, row*FONT_CHAR_HEIGHT*FONT_SCALE);
-            render_text_sized(renderer, &font, line->es, line->size, pos, 0xFFFFFFFF, FONT_SCALE);
+            Vec2f line_pos = {0};
+            vec2f_make(&line_pos, 0, row*FONT_CHAR_HEIGHT*FONT_SCALE);
+            vec2f_sub(&line_pos, camera_pos);
+            render_text_sized(renderer, &font, line->es, line->size, line_pos, 0xFFFFFFFF, FONT_SCALE);
         }
+
+        const Vec2f cursor_pos = {
+            .x = (int) floorf(editor.cursor_col * FONT_CHAR_WIDTH*FONT_SCALE),
+            .y = (int) floorf(editor.cursor_row * FONT_CHAR_HEIGHT*FONT_SCALE),
+        };
+        camera_project_point(window, cursor_pos);
 
         render_cursor(renderer, &font);
 
         SDL_RenderPresent(renderer);
+        const Uint32 duration = SDL_GetTicks() - start;
+        const Uint32 delta_time_ms = 1000/FPS; 
+        if (duration < delta_time_ms) {
+            SDL_Delay(delta_time_ms-duration);
+        }
     }
     SDL_DestroyWindow(window);
     SDL_Quit();
